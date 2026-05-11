@@ -164,15 +164,25 @@ def plot_attention_heatmap(attention_matrix, xticklabels=None, yticklabels=None,
     ax.set_xlabel("Atom Index", fontsize=22)
     ax.set_ylabel("Samples", fontsize=22)
     
-    xticklabels=[ i for i in range(attention_matrix.shape[1])] if xticklabels is None else xticklabels
-    yticklabels=[ i for i in range(attention_matrix.shape[0])] if yticklabels is None else yticklabels
-    ax.set_xticks([i+0.5 for i in xticklabels])
+    num_cols = attention_matrix.shape[1]
+    num_rows = attention_matrix.shape[0]
+
+    xticklabels = [i for i in range(num_cols)] if xticklabels is None else list(xticklabels)
+    yticklabels = [i for i in range(num_rows)] if yticklabels is None else list(yticklabels)
+
+    if len(xticklabels) != num_cols:
+        raise ValueError(f"xticklabels length ({len(xticklabels)}) does not match number of columns ({num_cols}).")
+    if len(yticklabels) != num_rows:
+        raise ValueError(f"yticklabels length ({len(yticklabels)}) does not match number of rows ({num_rows}).")
+
+    ax.set_xticks(np.arange(num_cols) + 0.5)
     ax.set_xticklabels(xticklabels, rotation=0, fontsize=10)
     if len(yticklabels) > 30:
-        ax.set_yticks([i + 0.5 for i in range(attention_matrix.shape[0]) if i % 4 == 0])
-        ax.set_yticklabels([str(i) for i in range(attention_matrix.shape[0]) if i % 4 == 0], rotation=0, fontsize=10)
+        show_idx = [i for i in range(num_rows) if i % 4 == 0]
+        ax.set_yticks(np.array(show_idx) + 0.5)
+        ax.set_yticklabels([yticklabels[i] for i in show_idx], rotation=0, fontsize=10)
     else:
-        ax.set_yticks([i+0.5 for i in yticklabels])
+        ax.set_yticks(np.arange(num_rows) + 0.5)
         ax.set_yticklabels(yticklabels, rotation=0, fontsize=10)
 
 
