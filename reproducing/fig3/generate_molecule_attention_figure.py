@@ -15,7 +15,7 @@
 
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -116,7 +116,7 @@ ATOM_HIGHLIGHT_RADIUS = 35
 # =============================================================================
 
 
-def get_atom_symbols(smiles: str) -> list[str]:
+def get_atom_symbols(smiles: str) -> List[str]:
     """根据 SMILES 返回原子符号列表。"""
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
@@ -129,8 +129,8 @@ def validate_inputs(
     left_atom_attention: np.ndarray,
     middle_heatmap_attention: np.ndarray,
     right_scatter_attention: np.ndarray,
-    heatmap_sample_labels=None,
-) -> list[str]:
+    heatmap_sample_labels: Optional[List[str]] = None,
+) -> List[str]:
     """检查输入数据维度是否与分子原子数一致。"""
     atom_symbols = get_atom_symbols(smiles)
     atom_count = len(atom_symbols)
@@ -168,7 +168,7 @@ def validate_inputs(
             "HEATMAP_SAMPLE_LABELS 的长度必须与 MIDDLE_HEATMAP_ATTENTION 的行数一致。"
         )
 
-    if right_scatter_attention.shape[0] < 1:
+    if right_scatter_attention.shape[0] == 0:
         raise ValueError(
             "RIGHT_SCATTER_ATTENTION 至少应包含 1 行数据。"
         )
