@@ -15,7 +15,9 @@ PiYG_cmap = cm.get_cmap('PiYG')
 target_green = PiYG_cmap(1.0) 
 colorMap = LinearSegmentedColormap.from_list('WhiteToGreen', ['white', target_green], N=256)
 
-def visualize_molecule_attention(smiles, attn_weights, norm=True, cmap=colorMap, figsize=(6, 6), radius=60, color_factor=0.3, save_path=None, ax=None):
+def visualize_molecule_attention(smiles, attn_weights, norm=True, cmap=colorMap, figsize=(6, 6), radius=60,
+                                 color_factor=0.3, highlight_style="gradient", solid_highlight_color=None,
+                                 solid_highlight_alpha=0.85, save_path=None, ax=None):
     """
     Visualize molecular structure and atom attention weights
 
@@ -77,7 +79,7 @@ def visualize_molecule_attention(smiles, attn_weights, norm=True, cmap=colorMap,
     for i in range(mol.GetNumAtoms()):
         atom_coords[i] = coords_drawer.GetDrawCoords(i)
 
-    # For each atom, create a gradient circle
+    # For each atom, create a highlight circle
     for i in range(mol.GetNumAtoms()):
         # Get atom coordinates in the image
         x, y = atom_coords[i]
@@ -86,19 +88,30 @@ def visualize_molecule_attention(smiles, attn_weights, norm=True, cmap=colorMap,
         x = int(x)
         y = int(y)
         
-        rgb = cmap(norm_attn[i]+ color_factor)
+        cmap_value = min(max(norm_attn[i] + color_factor, 0.0), 1.0)
+        rgb = cmap(cmap_value)
         color = (int(rgb[0]*255), int(rgb[1]*255), int(rgb[2]*255))
-        
-        radius = radius 
-        max_alpha_factor = 0.9
-        power = 0.9
-        for r in range(radius, 0, -1):
-            normalized_r = r / radius
-            gradient_effect = 1 - (normalized_r ** power) 
-            alpha = int(255 * gradient_effect * (norm_attn[i]+0.1) * max_alpha_factor)
-            alpha = max(0, min(255, alpha))
-            circle_color = color + (alpha,)
-            draw.ellipse([x-r, y-r, x+r, y+r], fill=circle_color)
+
+        if highlight_style == "solid":
+            if solid_highlight_color is None:
+                solid_color = color
+            else:
+                if max(solid_highlight_color) <= 1:
+                    solid_color = tuple(int(c * 255) for c in solid_highlight_color)
+                else:
+                    solid_color = tuple(int(c) for c in solid_highlight_color)
+            alpha = int(255 * min(max(solid_highlight_alpha, 0.0), 1.0))
+            draw.ellipse([x - radius, y - radius, x + radius, y + radius], fill=solid_color + (alpha,))
+        else:
+            max_alpha_factor = 0.9
+            power = 0.9
+            for r in range(radius, 0, -1):
+                normalized_r = r / radius
+                gradient_effect = 1 - (normalized_r ** power)
+                alpha = int(255 * gradient_effect * (norm_attn[i] + 0.1) * max_alpha_factor)
+                alpha = max(0, min(255, alpha))
+                circle_color = color + (alpha,)
+                draw.ellipse([x-r, y-r, x+r, y+r], fill=circle_color)
 
 
     # Overlay the gradient layer onto the base image
@@ -164,15 +177,25 @@ def plot_attention_heatmap(attention_matrix, xticklabels=None, yticklabels=None,
     ax.set_xlabel("Atom Index", fontsize=22)
     ax.set_ylabel("Samples", fontsize=22)
     
-    xticklabels=[ i for i in range(attention_matrix.shape[1])] if xticklabels is None else xticklabels
-    yticklabels=[ i for i in range(attention_matrix.shape[0])] if yticklabels is None else yticklabels
-    ax.set_xticks([i+0.5 for i in xticklabels])
+    num_cols = attention_matrix.shape[1]
+    num_rows = attention_matrix.shape[0]
+
+    xticklabels = [i for i in range(num_cols)] if xticklabels is None else list(xticklabels)
+    yticklabels = [i for i in range(num_rows)] if yticklabels is None else list(yticklabels)
+
+    if len(xticklabels) != num_cols:
+        raise ValueError(f"xticklabels length ({len(xticklabels)}) does not match number of columns ({num_cols}).")
+    if len(yticklabels) != num_rows:
+        raise ValueError(f"yticklabels length ({len(yticklabels)}) does not match number of rows ({num_rows}).")
+
+    ax.set_xticks(np.arange(num_cols) + 0.5)
     ax.set_xticklabels(xticklabels, rotation=0, fontsize=10)
     if len(yticklabels) > 30:
-        ax.set_yticks([i + 0.5 for i in range(attention_matrix.shape[0]) if i % 4 == 0])
-        ax.set_yticklabels([str(i) for i in range(attention_matrix.shape[0]) if i % 4 == 0], rotation=0, fontsize=10)
+        show_idx = [i for i in range(num_rows) if i % 4 == 0]
+        ax.set_yticks(np.array(show_idx) + 0.5)
+        ax.set_yticklabels([yticklabels[i] for i in show_idx], rotation=0, fontsize=10)
     else:
-        ax.set_yticks([i+0.5 for i in yticklabels])
+        ax.set_yticks(np.arange(num_rows) + 0.5)
         ax.set_yticklabels(yticklabels, rotation=0, fontsize=10)
 
 
