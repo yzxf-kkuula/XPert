@@ -44,7 +44,33 @@ MOLECULE_NAME = "Vorinostat"
 # 当前默认示例为 vorinostat（HDAC inhibitor）。
 MOLECULE_SMILES = "O=C(CCCCCCC(=O)Nc1ccccc1)NO"
 
-# 左图数据：长度必须等于分子原子数（RDKit 按 SMILES 解析后的重原子数）。
+# 直接定义：该值必须等于 MOLECULE_SMILES 的重原子数（RDKit 解析）。
+# 你换 SMILES 后，这个值会自动更新；可用它检查你提供的数据长度是否匹配。
+MOLECULE_HEAVY_ATOM_COUNT = Chem.MolFromSmiles(MOLECULE_SMILES).GetNumAtoms()
+
+# 选择是否绘制左/中/右图：
+# - 想省略右图：把 DRAW_RIGHT_PANEL 改为 False
+# - 同理可关闭左图/中图
+# - 关闭某图后，可在 main() 的 build_figure(...) 里把对应数据参数设为 None
+DRAW_LEFT_PANEL = True
+DRAW_MIDDLE_PANEL = True
+DRAW_RIGHT_PANEL = True
+
+# 颜色与样式配置（可直接改）：
+# 1) 左图原子注意力颜色映射：LEFT_ATTENTION_CMAP
+# 2) 中图热图颜色映射：MIDDLE_HEATMAP_CMAP
+# 3) 左图原子高亮样式：
+#    - "gradient": 当前默认的渐变光晕
+#    - "solid": 实心高亮（例如橙色实心）
+LEFT_ATTENTION_CMAP = colorMap
+MIDDLE_HEATMAP_CMAP = colorMap
+RIGHT_SCATTER_CMAP = "Paired"
+LEFT_HIGHLIGHT_STYLE = "gradient"  # 可改为 "solid"
+# 实心模式下的颜色（RGB；可用 0~1 或 0~255），例如橙色实心：
+LEFT_SOLID_HIGHLIGHT_COLOR = (1.0, 0.65, 0.0)
+LEFT_SOLID_HIGHLIGHT_ALPHA = 0.90
+
+# 左图数据：长度必须等于 MOLECULE_HEAVY_ATOM_COUNT。
 # 你可以直接修改成自己的原子平均注意力权重。
 LEFT_ATOM_ATTENTION = np.array(
     [
@@ -113,6 +139,8 @@ SHOW_HEATMAP_VALUES = False
 
 # 左图分子光晕大小。
 ATOM_HIGHLIGHT_RADIUS = 35
+# 左图颜色偏移强度（越大整体越亮）。
+LEFT_COLOR_FACTOR = 0.5
 # =============================================================================
 
 
@@ -126,52 +154,70 @@ def get_atom_symbols(smiles: str) -> List[str]:
 
 def validate_inputs(
     smiles: str,
-    left_atom_attention: np.ndarray,
-    middle_heatmap_attention: np.ndarray,
-    right_scatter_attention: np.ndarray,
+    left_atom_attention: Optional[np.ndarray] = None,
+    middle_heatmap_attention: Optional[np.ndarray] = None,
+    right_scatter_attention: Optional[np.ndarray] = None,
     heatmap_sample_labels: Optional[List[str]] = None,
+    draw_left_panel: bool = True,
+    draw_middle_panel: bool = True,
+    draw_right_panel: bool = True,
 ) -> List[str]:
     """检查输入数据维度是否与分子原子数一致。"""
     atom_symbols = get_atom_symbols(smiles)
     atom_count = len(atom_symbols)
 
-    left_atom_attention = np.asarray(left_atom_attention, dtype=float)
-    middle_heatmap_attention = np.asarray(middle_heatmap_attention, dtype=float)
-    right_scatter_attention = np.asarray(right_scatter_attention, dtype=float)
-
-    if left_atom_attention.ndim != 1:
-        raise ValueError("LEFT_ATOM_ATTENTION 必须是一维数组。")
-    if left_atom_attention.shape[0] != atom_count:
+    if atom_count != MOLECULE_HEAVY_ATOM_COUNT:
         raise ValueError(
-            f"LEFT_ATOM_ATTENTION 长度为 {left_atom_attention.shape[0]}，"
-            f"但分子原子数为 {atom_count}。"
+            f"MOLECULE_HEAVY_ATOM_COUNT={MOLECULE_HEAVY_ATOM_COUNT}，"
+            f"但由 SMILES 实际解析得到原子数为 {atom_count}。"
         )
 
-    if middle_heatmap_attention.ndim != 2:
-        raise ValueError("MIDDLE_HEATMAP_ATTENTION 必须是二维数组。")
-    if middle_heatmap_attention.shape[1] != atom_count:
-        raise ValueError(
-            f"MIDDLE_HEATMAP_ATTENTION 列数为 {middle_heatmap_attention.shape[1]}，"
-            f"但分子原子数为 {atom_count}。"
-        )
+    if not (draw_left_panel or draw_middle_panel or draw_right_panel):
+        raise ValueError("DRAW_LEFT_PANEL / DRAW_MIDDLE_PANEL / DRAW_RIGHT_PANEL 不能同时为 False。")
 
-    if right_scatter_attention.ndim != 2:
-        raise ValueError("RIGHT_SCATTER_ATTENTION 必须是二维数组。")
-    if right_scatter_attention.shape[1] != atom_count:
-        raise ValueError(
-            f"RIGHT_SCATTER_ATTENTION 列数为 {right_scatter_attention.shape[1]}，"
-            f"但分子原子数为 {atom_count}。"
-        )
+    if draw_left_panel:
+        if left_atom_attention is None:
+            raise ValueError("DRAW_LEFT_PANEL=True 时，left_atom_attention 不能为 None。")
+        left_atom_attention = np.asarray(left_atom_attention, dtype=float)
+        if left_atom_attention.ndim != 1:
+            raise ValueError("LEFT_ATOM_ATTENTION 必须是一维数组。")
+        if left_atom_attention.shape[0] != atom_count:
+            raise ValueError(
+                f"LEFT_ATOM_ATTENTION 长度为 {left_atom_attention.shape[0]}，"
+                f"但分子原子数为 {atom_count}。"
+            )
 
-    if heatmap_sample_labels is not None and len(heatmap_sample_labels) != middle_heatmap_attention.shape[0]:
-        raise ValueError(
-            "HEATMAP_SAMPLE_LABELS 的长度必须与 MIDDLE_HEATMAP_ATTENTION 的行数一致。"
-        )
+    if draw_middle_panel:
+        if middle_heatmap_attention is None:
+            raise ValueError("DRAW_MIDDLE_PANEL=True 时，middle_heatmap_attention 不能为 None。")
+        middle_heatmap_attention = np.asarray(middle_heatmap_attention, dtype=float)
+        if middle_heatmap_attention.ndim != 2:
+            raise ValueError("MIDDLE_HEATMAP_ATTENTION 必须是二维数组。")
+        if middle_heatmap_attention.shape[1] != atom_count:
+            raise ValueError(
+                f"MIDDLE_HEATMAP_ATTENTION 列数为 {middle_heatmap_attention.shape[1]}，"
+                f"但分子原子数为 {atom_count}。"
+            )
+        if heatmap_sample_labels is not None and len(heatmap_sample_labels) != middle_heatmap_attention.shape[0]:
+            raise ValueError(
+                "HEATMAP_SAMPLE_LABELS 的长度必须与 MIDDLE_HEATMAP_ATTENTION 的行数一致。"
+            )
 
-    if right_scatter_attention.shape[0] == 0:
-        raise ValueError(
-            "RIGHT_SCATTER_ATTENTION 至少应包含 1 行数据。"
-        )
+    if draw_right_panel:
+        if right_scatter_attention is None:
+            raise ValueError("DRAW_RIGHT_PANEL=True 时，right_scatter_attention 不能为 None。")
+        right_scatter_attention = np.asarray(right_scatter_attention, dtype=float)
+        if right_scatter_attention.ndim != 2:
+            raise ValueError("RIGHT_SCATTER_ATTENTION 必须是二维数组。")
+        if right_scatter_attention.shape[1] != atom_count:
+            raise ValueError(
+                f"RIGHT_SCATTER_ATTENTION 列数为 {right_scatter_attention.shape[1]}，"
+                f"但分子原子数为 {atom_count}。"
+            )
+        if right_scatter_attention.shape[0] == 0:
+            raise ValueError(
+                "RIGHT_SCATTER_ATTENTION 至少应包含 1 行数据。"
+            )
 
     return atom_symbols
 
@@ -179,10 +225,13 @@ def validate_inputs(
 def build_figure(
     molecule_name: str,
     smiles: str,
-    left_atom_attention: np.ndarray,
-    middle_heatmap_attention: np.ndarray,
-    right_scatter_attention: np.ndarray,
+    left_atom_attention: Optional[np.ndarray],
+    middle_heatmap_attention: Optional[np.ndarray],
+    right_scatter_attention: Optional[np.ndarray],
     output_path: Optional[Path] = None,
+    draw_left_panel: bool = True,
+    draw_middle_panel: bool = True,
+    draw_right_panel: bool = True,
 ):
     """
     生成与 notebook 中相同结构的三联图。
@@ -196,63 +245,85 @@ def build_figure(
         middle_heatmap_attention=middle_heatmap_attention,
         right_scatter_attention=right_scatter_attention,
         heatmap_sample_labels=HEATMAP_SAMPLE_LABELS,
+        draw_left_panel=draw_left_panel,
+        draw_middle_panel=draw_middle_panel,
+        draw_right_panel=draw_right_panel,
     )
     print(f"Atom count: {len(atom_symbols)}")
     print("Atom order:", atom_symbols)
 
-    heatmap_sample_labels = (
-        [f"Sample {i + 1}" for i in range(np.asarray(middle_heatmap_attention).shape[0])]
-        if HEATMAP_SAMPLE_LABELS is None
-        else HEATMAP_SAMPLE_LABELS
-    )
+    enabled_panels = []
+    if draw_left_panel:
+        enabled_panels.append("left")
+    if draw_middle_panel:
+        enabled_panels.append("middle")
+    if draw_right_panel:
+        enabled_panels.append("right")
 
     fig, axes = plt.subplots(
         1,
-        3,
-        figsize=(22, 6),
-        gridspec_kw={"width_ratios": [1, 1, 1]},
+        len(enabled_panels),
+        figsize=(7.3 * len(enabled_panels), 6),
+        gridspec_kw={"width_ratios": [1] * len(enabled_panels)},
     )
+    if len(enabled_panels) == 1:
+        axes = [axes]
 
-    # 左图：分子结构 + 原子平均注意力着色
-    visualize_molecule_attention(
-        smiles=smiles,
-        attn_weights=np.asarray(left_atom_attention, dtype=float),
-        norm=True,
-        cmap=colorMap,
-        radius=ATOM_HIGHLIGHT_RADIUS,
-        color_factor=0.5,
-        ax=axes[0],
-    )
-    axes[0].set_title("Chemical structure", fontsize=18, pad=12)
+    axis_idx = 0
 
-    # 中图：样本 × 原子的注意力热图
-    plot_attention_heatmap(
-        attention_matrix=np.asarray(middle_heatmap_attention, dtype=float),
-        xticklabels=atom_symbols,
-        yticklabels=heatmap_sample_labels,
-        title="Attention heatmap across samples",
-        cmap=colorMap,
-        annot=SHOW_HEATMAP_VALUES,
-        fmt=".4f",
-        ax=axes[1],
-    )
+    if draw_left_panel:
+        # 左图：分子结构 + 原子平均注意力着色
+        visualize_molecule_attention(
+            smiles=smiles,
+            attn_weights=np.asarray(left_atom_attention, dtype=float),
+            norm=True,
+            cmap=LEFT_ATTENTION_CMAP,
+            radius=ATOM_HIGHLIGHT_RADIUS,
+            color_factor=LEFT_COLOR_FACTOR,
+            highlight_style=LEFT_HIGHLIGHT_STYLE,
+            solid_highlight_color=LEFT_SOLID_HIGHLIGHT_COLOR,
+            solid_highlight_alpha=LEFT_SOLID_HIGHLIGHT_ALPHA,
+            ax=axes[axis_idx],
+        )
+        axes[axis_idx].set_title("Chemical structure", fontsize=18, pad=12)
+        axis_idx += 1
 
-    # 右图：五个随机种子的平均原子注意力散点图
-    scatter_labels = [f"Seed {i + 1}" for i in range(np.asarray(right_scatter_attention).shape[0])]
-    plot_attention_scatter(
-        attention_vectors=np.asarray(right_scatter_attention, dtype=float),
-        labels=scatter_labels,
-        title="Mean attention across random seeds",
-        cmap="Paired",
-        ax=axes[2],
-    )
+    if draw_middle_panel:
+        # 中图：样本 × 原子的注意力热图
+        heatmap_sample_labels = (
+            [f"Sample {i + 1}" for i in range(np.asarray(middle_heatmap_attention).shape[0])]
+            if HEATMAP_SAMPLE_LABELS is None
+            else HEATMAP_SAMPLE_LABELS
+        )
+        plot_attention_heatmap(
+            attention_matrix=np.asarray(middle_heatmap_attention, dtype=float),
+            xticklabels=atom_symbols,
+            yticklabels=heatmap_sample_labels,
+            title="Attention heatmap across samples",
+            cmap=MIDDLE_HEATMAP_CMAP,
+            annot=SHOW_HEATMAP_VALUES,
+            fmt=".4f",
+            ax=axes[axis_idx],
+        )
+        axis_idx += 1
+
+    if draw_right_panel:
+        # 右图：五个随机种子的平均原子注意力散点图
+        scatter_labels = [f"Seed {i + 1}" for i in range(np.asarray(right_scatter_attention).shape[0])]
+        plot_attention_scatter(
+            attention_vectors=np.asarray(right_scatter_attention, dtype=float),
+            labels=scatter_labels,
+            title="Mean attention across random seeds",
+            cmap=RIGHT_SCATTER_CMAP,
+            ax=axes[axis_idx],
+        )
 
     fig.suptitle(
         f"Attention Visualization for {molecule_name}",
         fontsize=24,
         y=1.06,
     )
-    plt.subplots_adjust(wspace=0.28)
+    plt.subplots_adjust(wspace=0.28 if len(enabled_panels) > 1 else 0.12)
 
     if output_path is not None:
         output_path = Path(output_path)
@@ -278,6 +349,9 @@ def main():
         middle_heatmap_attention=MIDDLE_HEATMAP_ATTENTION,
         right_scatter_attention=RIGHT_SCATTER_ATTENTION,
         output_path=OUTPUT_PATH,
+        draw_left_panel=DRAW_LEFT_PANEL,
+        draw_middle_panel=DRAW_MIDDLE_PANEL,
+        draw_right_panel=DRAW_RIGHT_PANEL,
     )
     plt.show()
 
