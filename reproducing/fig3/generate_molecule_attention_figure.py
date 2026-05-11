@@ -129,6 +129,7 @@ def validate_inputs(
     left_atom_attention: np.ndarray,
     middle_heatmap_attention: np.ndarray,
     right_scatter_attention: np.ndarray,
+    heatmap_sample_labels=None,
 ) -> list[str]:
     """检查输入数据维度是否与分子原子数一致。"""
     atom_symbols = get_atom_symbols(smiles)
@@ -162,14 +163,14 @@ def validate_inputs(
             f"但分子原子数为 {atom_count}。"
         )
 
-    if HEATMAP_SAMPLE_LABELS is not None and len(HEATMAP_SAMPLE_LABELS) != middle_heatmap_attention.shape[0]:
+    if heatmap_sample_labels is not None and len(heatmap_sample_labels) != middle_heatmap_attention.shape[0]:
         raise ValueError(
             "HEATMAP_SAMPLE_LABELS 的长度必须与 MIDDLE_HEATMAP_ATTENTION 的行数一致。"
         )
 
-    if right_scatter_attention.shape[0] != 5:
+    if right_scatter_attention.shape[0] < 1:
         raise ValueError(
-            "RIGHT_SCATTER_ATTENTION 应包含 5 行数据，分别对应 5 个随机种子。"
+            "RIGHT_SCATTER_ATTENTION 至少应包含 1 行数据。"
         )
 
     return atom_symbols
@@ -194,6 +195,7 @@ def build_figure(
         left_atom_attention=left_atom_attention,
         middle_heatmap_attention=middle_heatmap_attention,
         right_scatter_attention=right_scatter_attention,
+        heatmap_sample_labels=HEATMAP_SAMPLE_LABELS,
     )
     print(f"Atom count: {len(atom_symbols)}")
     print("Atom order:", atom_symbols)
@@ -255,8 +257,14 @@ def build_figure(
     if output_path is not None:
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(output_path, format=output_path.suffix.lstrip(".") or "svg", dpi=300, bbox_inches="tight")
-        print(f"Figure saved to: {output_path}")
+        if output_path.suffix:
+            save_path = output_path
+            save_format = output_path.suffix.lstrip(".")
+        else:
+            save_path = output_path.with_suffix(".svg")
+            save_format = "svg"
+        fig.savefig(save_path, format=save_format, dpi=300, bbox_inches="tight")
+        print(f"Figure saved to: {save_path}")
 
     return fig
 
